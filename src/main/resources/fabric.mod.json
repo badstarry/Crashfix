@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "crashfix",
+  "version": "${version}",
+  "name": "Crashfix",
+  "description": "修复官方 Bug MC-306072：收纳袋内物品数据异常时，查看工具提示会触发 java.lang.IllegalStateException: Stack must be non-empty 导致游戏崩溃。Fixes MC-306072 (bundle tooltip crash on malformed item stacks).",
+  "authors": [
+    "badstarry"
+  ],
+  "contact": {
+    "homepage": "https://github.com/badstarry/crashfix",
+    "sources": "https://github.com/badstarry/crashfix"
+  },
+  "license": "CC0-1.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "de.badstarry.crashfix.Crashfix"
+    ],
+    "client": [
+      "de.badstarry.crashfix.CrashfixClient"
+    ]
+  },
+  "mixins": [
+    "crashfix.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": ">=26.2 <27.0.0",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

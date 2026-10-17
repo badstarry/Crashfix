@@ -1,0 +1,5 @@
+{
+  "crashfix.command.selftest.no_player": "Join a world first.",
+  "crashfix.command.selftest.inventory_full": "Your inventory is full.",
+  "crashfix.command.selftest.given": "Gave you a malformed bundle (MC-306072 test item). Hover it in your inventory - without Crashfix this crashes the game."
+}

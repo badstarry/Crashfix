@@ -1,0 +1,5 @@
+{
+  "crashfix.command.selftest.no_player": "请先进入世界。",
+  "crashfix.command.selftest.inventory_full": "你的物品栏已满。",
+  "crashfix.command.selftest.given": "已给你一个异常数据的收纳袋（MC-306072 测试物品）。把鼠标悬停在它上面——没有本模组时游戏会崩溃。"
+}

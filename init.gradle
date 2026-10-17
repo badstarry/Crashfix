@@ -1,0 +1,47 @@
+// Rewrite Maven Central repository URLs to Aliyun mirrors (repo.maven.apache.org returns 403 in this environment).
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+
+def rewriteCentral = { repo ->
+	if (repo instanceof MavenArtifactRepository) {
+		def url = repo.url?.toString() ?: ''
+		if (url.startsWith('https://repo.maven.apache.org/maven2') ||
+				url.startsWith('https://repo1.maven.org/maven2') ||
+				url.contains('//repo.maven.apache.org/')) {
+			repo.setUrl('https://maven.aliyun.com/repository/central')
+		}
+	}
+}
+
+settingsEvaluated { settings ->
+	settings.pluginManagement.repositories.configureEach(rewriteCentral)
+}
+
+allprojects {
+	buildscript {
+		repositories.configureEach(rewriteCentral)
+		repositories.maven {
+			name = 'AliyunPublic'
+			url = 'https://maven.aliyun.com/repository/public'
+		}
+	}
+
+	repositories.whenObjectAdded(rewriteCentral)
+	repositories.configureEach(rewriteCentral)
+
+	repositories.maven {
+		name = 'AliyunPublic'
+		url = 'https://maven.aliyun.com/repository/public'
+	}
+	repositories.maven {
+		name = 'AliyunCentral'
+		url = 'https://maven.aliyun.com/repository/central'
+	}
+	repositories.maven {
+		name = 'TerraformersMC'
+		url = 'https://maven.terraformersmc.com/releases/'
+	}
+	repositories.maven {
+		name = 'Shedaniel'
+		url = 'https://maven.shedaniel.me/'
+	}
+}
