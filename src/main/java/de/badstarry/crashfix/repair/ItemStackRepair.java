@@ -1,6 +1,8 @@
 package de.badstarry.crashfix.repair;
 
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import de.badstarry.crashfix.util.OneShotLog;
 
@@ -11,6 +13,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
 
 /**
@@ -34,6 +37,13 @@ import net.minecraft.world.item.Items;
  * amount of items it holds: bundle weight is computed as
  * {@code count / maxStackSize}, which yields exactly the same weight as the
  * equivalent bundle of legitimate, split stacks.
+ *
+ * <p>Repairs are cached per {@link ItemStackTemplate}: the tooltip renderer
+ * calls {@code create()} for every entry on every frame while a bundle is
+ * hovered, so the (comparatively expensive) validation has to run only once per
+ * distinct template. Templates are immutable records and therefore safe cache
+ * keys, and {@link Repair#toStack()} hands out a fresh stack each time so
+ * callers can never mutate the cached result.
  */
 public final class ItemStackRepair {
 	/**
@@ -48,36 +58,64 @@ public final class ItemStackRepair {
 
 	private static final String LOG_KEY = "repaired-stack";
 
+	/** Upper bound so hostile data cannot grow the cache without end. */
+	private static final int CACHE_LIMIT = 1024;
+
+	private static final Map<ItemStackTemplate, Repair> CACHE = new ConcurrentHashMap<>();
+
+	/**
+	 * The result of a repair: everything needed to build the replacement stack.
+	 * The count is the original count, the components are the original patch
+	 * minus the contradictory components.
+	 */
+	public record Repair(Holder<Item> item, int count, DataComponentPatch components) {
+		public ItemStack toStack() {
+			return new ItemStack(item, count, components);
+		}
+	}
+
 	private ItemStackRepair() {
 	}
 
 	/**
-	 * Attempts to build a valid stack out of a malformed one.
+	 * Attempts to compute a repair for a malformed template.
 	 *
-	 * @param broken malformed stack, must not be {@code null}
-	 * @return a valid non-empty stack, or {@code null} when the stack cannot be repaired
+	 * @return the repair, or {@code null} when the template cannot be repaired
 	 */
-	public static ItemStack repair(ItemStack broken) {
-		if (broken == null) {
-			return null;
+	public static Repair repair(ItemStackTemplate template) {
+		Repair cached = CACHE.get(template);
+		if (cached != null) {
+			return cached;
 		}
 
-		Item item = broken.getItem();
+		if (CACHE.size() >= CACHE_LIMIT) {
+			CACHE.clear();
+		}
+
+		Repair repaired = computeRepair(template);
+		if (repaired != null) {
+			CACHE.put(template, repaired);
+		}
+
+		return repaired;
+	}
+
+	private static Repair computeRepair(ItemStackTemplate template) {
+		Item item = template.item().value();
 		if (item == Items.AIR) {
 			// Nothing meaningful left to repair; callers have to skip this entry.
 			return null;
 		}
 
-		Holder<Item> holder = BuiltInRegistries.ITEM.wrapAsHolder(item);
-		DataComponentPatch sanitized = broken.getComponentsPatch().forget(SUSPECT_COMPONENTS::contains);
+		DataComponentPatch sanitized = template.components().forget(SUSPECT_COMPONENTS::contains);
 
-		ItemStack withoutSuspectComponents = build(holder, sanitized, broken.getCount());
+		Repair withoutSuspectComponents = build(template.item(), template.count(), sanitized);
 		if (withoutSuspectComponents != null) {
 			logRepairOnce();
 			return withoutSuspectComponents;
 		}
 
-		ItemStack plain = build(holder, DataComponentPatch.EMPTY, broken.getCount());
+		Repair plain = build(template.item(), template.count(), DataComponentPatch.EMPTY);
 		if (plain != null) {
 			logRepairOnce();
 			return plain;
@@ -87,21 +125,17 @@ public final class ItemStackRepair {
 	}
 
 	/**
-	 * Builds a stack with the given components and the original count.
-	 *
-	 * <p>The components are validated with a probe stack of {@code 1} item, because the
-	 * requested count may exceed the maximum stack size - which vanilla rejects but which
-	 * is exactly what has to be preserved here.
-	 *
-	 * @return a non-empty stack, or {@code null} when even the components are unusable
+	 * Validates the components with a probe stack of {@code 1} item, because the
+	 * requested count may exceed the maximum stack size - which vanilla rejects
+	 * but which is exactly what has to be preserved here.
 	 */
-	private static ItemStack build(Holder<Item> holder, DataComponentPatch components, int requestedCount) {
+	private static Repair build(Holder<Item> holder, int requestedCount, DataComponentPatch components) {
 		ItemStack probe = new ItemStack(holder, 1, components);
 		if (probe.isEmpty() || ItemStack.validateStrict(probe).error().isPresent()) {
 			return null;
 		}
 
-		return new ItemStack(holder, Math.max(1, requestedCount), components);
+		return new Repair(holder, Math.max(1, requestedCount), components);
 	}
 
 	private static void logRepairOnce() {

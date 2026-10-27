@@ -30,6 +30,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  *     <li>it sits at the end of the method, so the strict validation only runs
  *         again for data vanilla already rejected.</li>
  * </ul>
+ *
+ * <p>The repair result is cached per template (see {@link ItemStackRepair}),
+ * because the bundle tooltip renderer calls {@code create()} for every entry on
+ * every frame while the tooltip is open.
  */
 @Mixin(ItemStackTemplate.class)
 public abstract class ItemStackTemplateMixin {
@@ -40,9 +44,9 @@ public abstract class ItemStackTemplateMixin {
 			return;
 		}
 
-		ItemStack repaired = ItemStackRepair.repair(stack);
+		ItemStackRepair.Repair repaired = ItemStackRepair.repair((ItemStackTemplate) (Object) this);
 		if (repaired != null) {
-			cir.setReturnValue(repaired);
+			cir.setReturnValue(repaired.toStack());
 		}
 	}
 }

@@ -50,10 +50,17 @@ Two mixins (`src/main/resources/crashfix.mixins.json`):
    equivalent bundle of legitimate, split stacks (`weight = count / maxStackSize`). The
    injection sits at the end of the method so the strict validation only runs again for
    actually broken data.
-2. `BundleContentsMutableMixin` - a safety net for bundles that still contain unusable
-   entries (for example an `air` entry injected with commands). Empty stacks are
-   dropped right after the mutable contents are built, and once more in
-   `toImmutable()`, which is the exact crash site.
+2. `ItemStackTemplateEmptyGuardMixin` - a last line of defence, injected at the head of
+   `ItemStackTemplate#fromNonEmptyStack(ItemStack)`, the method whose
+   `IllegalStateException: Stack must be non-empty` is the documented crash. Entries
+   that cannot be repaired at all (for example an `air` entry injected with commands)
+   are replaced with a barrier placeholder instead of crashing the game.
+
+   This guard is written against `fromNonEmptyStack` on purpose: its bytecode is
+   identical in 26.2 and 26.3, while everything around it was refactored in 26.3
+   (`BundleContents$Mutable` grew a `GrowableMutableContainer` parent class, and
+   `BundleContents#asMutable()` replaced the public `Mutable(BundleContents)`
+   constructor). The main fix survived that refactor unchanged.
 
 Both injections are declared with `require = 1` while the mixin config is
 `"required": false`, so a Minecraft release that renames these internals logs a loud
@@ -61,7 +68,7 @@ warning at startup instead of silently disabling the fix or stopping the game.
 
 ## Requirements
 
-- Minecraft 26.2 (declared range `>=26.2 <27.0.0`)
+- Minecraft 26.2 and 26.3 (declared range `>=26.2 <27.0.0`)
 - Fabric Loader 0.19.3 or newer
 - Fabric API
 - Java 25
@@ -81,7 +88,7 @@ This gives you a bundle holding both malformed stacks from the bug report. Hover
 used to crash the game instantly; with the mod installed the tooltip renders and the
 bundle still shows every item, including the oversized amount.
 
-Behaviour of the repair, measured on a dedicated server:
+Behaviour of the repair, measured on dedicated 26.2 and 26.3 servers with the same jar:
 
 | Bundle entry | Result |
 | --- | --- |
@@ -97,14 +104,14 @@ like they do for a bundle created by Minecraft itself.
 
 ```
 src/main/java/de/badstarry/crashfix
-├── Crashfix.java                       # common entrypoint
-├── CrashfixClient.java                 # client entrypoint
-├── client/SelfTestCommand.java         # /crashfix selftest
+├── Crashfix.java                             # common entrypoint
+├── CrashfixClient.java                       # client entrypoint
+├── client/SelfTestCommand.java               # /crashfix selftest
 ├── mixin/
-│   ├── ItemStackTemplateMixin.java     # repairs malformed stacks
-│   └── BundleContentsMutableMixin.java # drops unusable bundle entries
-├── repair/ItemStackRepair.java         # repair logic
-└── util/OneShotLog.java                # warn once, then debug
+│   ├── ItemStackTemplateMixin.java           # repairs malformed stacks
+│   └── ItemStackTemplateEmptyGuardMixin.java # guards the crash site itself
+├── repair/ItemStackRepair.java               # repair logic
+└── util/OneShotLog.java                      # warn once, then debug
 ```
 
 Minecraft 26.2 is consumed as a merged jar, so the mod uses a single source set
